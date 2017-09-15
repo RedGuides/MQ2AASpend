@@ -10,6 +10,7 @@
 // v2.5 - Eqmule 12-17-2016 - Added SpendOrder as a ini setting. Defualt is still class,focus,arch,gen,special.
 
 #include "../MQ2Plugin.h"
+using namespace std;
 #include <vector>
 PLUGIN_VERSION(2.5);
 
