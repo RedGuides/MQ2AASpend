@@ -253,7 +253,11 @@ void SpendFromINI() {
 				if (bBuy) {
 					WriteChatf("MQ2AASpend :: Attempting to purchase level %d of %s for %d point%s.", curLevel + 1, vRef.c_str(), aaCost, aaCost > 1 ? "s" : "");
 					if (!bDebug) {
+						#if !defined(ROF2EMU) && !defined(UFEMU)
+						sprintf_s(szCommand, "/alt buy %d", pAbility->ID);
+						#else
 						sprintf_s(szCommand, "/alt buy %d", pAbility->Index);
+						#endif
 						DoCommand(GetCharInfo()->pSpawn, szCommand);
 					}
 					else {
@@ -396,7 +400,11 @@ void BuySingleAA(PALTABILITY pBruteAbility) {
 			if (GetCharInfo2()->AAPoints >= aaCost) {
 				WriteChatf("MQ2AASpend :: Attempting to purchase level %d of %s for %d point%s.", curLevel + 1, AAName, aaCost, aaCost > 1 ? "s" : "");
 				if (!bDebug) {
+					#if !defined(ROF2EMU) && !defined(UFEMU)
+					sprintf_s(szCommand, "/alt buy %d", pAbility->ID);
+					#else
 					sprintf_s(szCommand, "/alt buy %d", pAbility->Index);
+					#endif
 					DoCommand(GetCharInfo()->pSpawn, szCommand);
 				}
 				else {
