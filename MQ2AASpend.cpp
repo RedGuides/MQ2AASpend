@@ -694,7 +694,7 @@ PLUGIN_API VOID OnPulse(VOID) {
 }
 
 PLUGIN_API DWORD OnIncomingChat(PCHAR Line, DWORD Color) {
-    if ( strstr(Line,"You have gained") && strstr(Line,"ability point") && strstr(Line,"You now have") ) {
+    if ( (strstr(Line,"You have gained") && strstr(Line,"ability point") && strstr(Line,"You now have")) || strstr(Line, "You have reached the AA point cap") ) {
         if(bBruteForce)
 			doBruteForce = 1;
 		if (bBruteForceBonusFirst)
