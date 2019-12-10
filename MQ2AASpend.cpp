@@ -49,7 +49,7 @@ int tCount = 0;
 
 
 void ShowHelp() {
-	WriteChatf("\atMQ2AASpend :: v%1.2f :: by Eqmule\ax", MQ2Version);
+	WriteChatf("\atMQ2AASpend :: v%1.2f :: by Sym\ax", MQ2Version);
 	WriteChatf("/aaspend :: Lists command syntax");
 	WriteChatf("/aaspend status :: Shows current status");
     WriteChatf("/aaspend add \"AA Name\" maxlevel :: Adds AA Name to ini file, will not purchase past max level. Use M to specify max level");
