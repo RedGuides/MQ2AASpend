@@ -1,4 +1,4 @@
-// MQ2AASpend.cpp : NotAddicted exclusive ini based auto AA purchaser
+// MQ2AASpend.cpp : Redguides exclusive ini based auto AA purchaser
 // v1.0 - Sym - 04-23-2012
 // v1.1 - Sym - 05-26-2012 - Updated to spends aa on normal level ding and basic error checking on ini string
 // v2.0 - Eqmule 11-23-2015 - Updated to not rely on the UI or macrocalls.
@@ -49,10 +49,9 @@ int tCount = 0;
 
 
 void ShowHelp() {
-    WriteChatf("\atMQ2AASpend :: v1.0 :: by Sym for NotAddicted.com\ax");
-    WriteChatf("\atMQ2AASpend :: v%1.2f :: by Eqmule\ax", MQ2Version);
-    WriteChatf("/aaspend :: Lists command syntax");
-    WriteChatf("/aaspend status :: Shows current status");
+	WriteChatf("\atMQ2AASpend :: v%1.2f :: by Eqmule\ax", MQ2Version);
+	WriteChatf("/aaspend :: Lists command syntax");
+	WriteChatf("/aaspend status :: Shows current status");
     WriteChatf("/aaspend add \"AA Name\" maxlevel :: Adds AA Name to ini file, will not purchase past max level. Use M to specify max level");
     WriteChatf("/aaspend del \"AA Name\" :: Deletes AA Name from ini file");
     WriteChatf("/aaspend buy \"AA Name\" :: Buys a particular AA. Ignores bank setting.");
