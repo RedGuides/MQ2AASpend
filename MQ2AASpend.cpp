@@ -354,7 +354,7 @@ PALTABILITY GetFirstPurchasableAA(bool bBonus)
 	//spend in this order:
 	//class, focus, archtype, general, special
 	std::string sorder = SpendOrder;
-	int order[5];
+	int order[5] = { 3, 5, 2, 1, 4 };
 	std::string temp;
 	int j = 0;
 	for (std::string::iterator i = sorder.begin(); i != sorder.end(); i++,j++) {
