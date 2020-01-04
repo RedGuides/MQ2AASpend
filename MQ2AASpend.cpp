@@ -8,11 +8,12 @@
 // v2.3 - Eqmule 08-30-2016 - Fixed buy aa so it will take character level into account when buying aa's
 // v2.4 - Eqmule 09-25-2016 - Fixed buy aa so it will not try to buy aa's with an ID of 0 (like Hidden Communion of the Cheetah)
 // v2.5 - Eqmule 12-17-2016 - Added SpendOrder as a ini setting. Defualt is still class,focus,arch,gen,special.
+// v2.6 - Sic    01-04-2020 - Updated Bonus to reflect AutoGrant as of 12/19/2019 gives autogrant up to and including TBM, xpac #22
 
 #include "../MQ2Plugin.h"
 using namespace std;
 #include <vector>
-PLUGIN_VERSION(2.5);
+PLUGIN_VERSION(2.6);
 
 PreSetup("MQ2AASpend");
 #pragma warning(disable:4018)
@@ -316,7 +317,7 @@ PALTABILITY GetFirstPurchasableAA(bool bBonus)
 			bool cantrain = pAltAdvManager->CanTrainAbility((PcZoneClient*)pPCData, (CAltAbilityData*)pAbility, 0, 0, 0);
 			if (cantrain) {
 				if (bBonus) {
-					if (pAbility->Expansion < 18)//VoA
+					if (pAbility->Expansion <= 22)// as of 12/19/2019 gives autogrant up to and including TBM, xpac #22
 						continue;
 				}
 				if (pAbility->ID == 0)
