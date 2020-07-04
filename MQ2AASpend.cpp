@@ -10,7 +10,7 @@
 // v2.5 - Eqmule 12-17-2016 - Added SpendOrder as a ini setting. Defualt is still class,focus,arch,gen,special.
 // v2.6 - Sic    01-04-2020 - Updated Bonus to reflect AutoGrant as of 12/19/2019 gives autogrant up to and including TBM, xpac #22
 // TODO: This file has mixed tabs and spaces, choose one and standardize
-#include "../MQ2Plugin.h"
+#include <mq/Plugin.h>
 
 PreSetup("MQ2AASpend");
 PLUGIN_VERSION(2.6);
@@ -76,7 +76,7 @@ void ShowStatus()
 
 void Update_INIFileName()
 {
-    sprintf_s(INIFileName, "%s\\%s_%s.ini", gszINIPath, EQADDR_SERVERNAME, GetCharInfo()->Name);
+    sprintf_s(INIFileName, "%s\\%s_%s.ini", gPathConfig, EQADDR_SERVERNAME, GetCharInfo()->Name);
 }
 
 void SaveINI()
@@ -191,7 +191,7 @@ bool CheckWindowValue(PCHAR szToCheck)
 
 void SpendFromINI()
 {
-	if (!bAutoSpendNow && static_cast<int>(GetCharInfo2()->AAPoints) < atoi(iBankPoints)) return;
+	if (!bAutoSpendNow && static_cast<int>(GetPcProfile()->AAPoints) < GetIntFromString(iBankPoints, 0)) return;
 	if (vAAList.empty()) return;
 
 	bool bBuy = true;
@@ -244,7 +244,7 @@ void SpendFromINI()
 				if (!_stricmp(vLevelRef.c_str(), "M")) {
 					bBuy = true;
 				} else {
-					int b = atoi(vLevelRef.c_str());
+					int b = GetIntFromString(vLevelRef.c_str(), MAX_PC_LEVEL + 1);
 					if (curLevel >= b) {
 						if (bDebug)
 							WriteChatf("MQ2AASpend :: %s max level has been reached per ini setting, skipping", vRef.c_str());
@@ -252,7 +252,7 @@ void SpendFromINI()
 					}
 				}
 			}
-			if (GetCharInfo2()->AAPoints >= aaCost) {
+			if (GetPcProfile()->AAPoints >= aaCost) {
 				if (bBuy) {
 					WriteChatf("MQ2AASpend :: Attempting to purchase level %d of %s for %d point%s.", curLevel + 1, vRef.c_str(), aaCost, aaCost > 1 ? "s" : "");
 					if (!bDebug) {
@@ -328,7 +328,7 @@ PALTABILITY GetFirstPurchasableAA(bool bBonus)
 				if (pAbility->ID == 0)
 					continue;//hidden communion of the cheetah is not valid and has this id, but is still sent down to the client
 				if (bDebug) {
-					if (const char* AAName = pCDBStr->GetString(pAbility->nName, 1, nullptr)) {
+					if (const char* AAName = pCDBStr->GetString(pAbility->nName, eAltAbilityName, nullptr)) {
 						WriteChatf("Adding %s (expansion:%d) to the %d map", AAName, pAbility->Expansion, pAbility->Type);
 					}
 				}
@@ -364,7 +364,7 @@ PALTABILITY GetFirstPurchasableAA(bool bBonus)
 	int j = 0;
 	for (std::string::iterator i = sorder.begin(); i != sorder.end(); i++,j++) {
 		temp = (*i);
-		order[j] = atoi(temp.c_str());
+		order[j] = GetIntFromString(temp.c_str(), 0);
 	}
 	for (int i = 0; i < 5; i++) {
 		std::map<DWORD, PALTABILITY>&retmap = GetMapByOrder(order[i]);
@@ -385,7 +385,7 @@ void BuySingleAA(PALTABILITY pBruteAbility)
 	}
 	int curLevel = 0;
 	if (PALTABILITY pAbility = pBruteAbility) {
-		if (const char* AAName = pCDBStr->GetString(pBruteAbility->nName, 1, nullptr)) {
+		if (const char* AAName = pCDBStr->GetString(pBruteAbility->nName, eAltAbilityName, nullptr)) {
 			aaType = pAbility->Type;
 			if (!aaType) {
 				WriteChatf("MQ2AASpend :: Unable to purchase %s", AAName);
@@ -401,7 +401,7 @@ void BuySingleAA(PALTABILITY pBruteAbility)
 				WriteChatf("MQ2AASpend :: You can't train %s for some reason , aborting", AAName);
 				return;
 			}
-			if (GetCharInfo2()->AAPoints >= aaCost) {
+			if (GetPcProfile()->AAPoints >= aaCost) {
 				WriteChatf("MQ2AASpend :: Attempting to purchase level %d of %s for %d point%s.", curLevel + 1, AAName, aaCost, aaCost > 1 ? "s" : "");
 				if (!bDebug) {
 					char szCommand[MAX_BUYLINE] = { 0 };
@@ -425,11 +425,11 @@ void BuySingleAA(PALTABILITY pBruteAbility)
 
 void BruteForceBonusFirstPurchase(int mode)
 {
-	if (mode != 2 && static_cast<int>(GetCharInfo2()->AAPoints) < atoi(iBankPoints))
+	if (mode!=2 && static_cast<int>(GetPcProfile()->AAPoints) < GetIntFromString(iBankPoints, 0))
 		return;
 	DebugSpew("MQ2AASpend :: Starting Brute Force Bonus First Purchase");
 	if (PALTABILITY pBruteAbility = GetFirstPurchasableAA(true)) {
-		if (const char* AAName = pCDBStr->GetString(pBruteAbility->nName, 1, nullptr)) {
+		if (const char* AAName = pCDBStr->GetString(pBruteAbility->nName, eAltAbilityName, nullptr)) {
 			if (!bDebug) {
 				BuySingleAA(pBruteAbility);
 			}
@@ -444,11 +444,11 @@ void BruteForceBonusFirstPurchase(int mode)
 void BruteForcePurchase(int mode)
 {
 
-	if (mode != 2 && static_cast<int>(GetCharInfo2()->AAPoints) < atoi(iBankPoints))
+	if (mode!=2 && static_cast<int>(GetPcProfile()->AAPoints) < GetIntFromString(iBankPoints, 0))
 		return;
 	DebugSpew("MQ2AASpend :: Starting Brute Force Purchase");
 	if (PALTABILITY pBruteAbility = GetFirstPurchasableAA(false)) {
-		if (const char* AAName = pCDBStr->GetString(pBruteAbility->nName, 1, nullptr)) {
+		if (const char* AAName = pCDBStr->GetString(pBruteAbility->nName, eAltAbilityName, nullptr)) {
 			if (!bDebug) {
 				BuySingleAA(pBruteAbility);
 			}
@@ -460,7 +460,7 @@ void BruteForcePurchase(int mode)
 	DebugSpew("MQ2AASpend :: Brute Force Purchase Complete");
 }
 
-PLUGIN_API VOID SetGameState(DWORD GameState)
+PLUGIN_API void SetGameState(int GameState)
 {
     if(GameState==GAMESTATE_INGAME) {
         if (!bInitDone) LoadINI();
@@ -644,7 +644,7 @@ void SpendCommand(PSPAWNINFO pChar, PCHAR szLine)
 }
 
 // This is called every time MQ pulses
-PLUGIN_API VOID OnPulse()
+PLUGIN_API void OnPulse()
 {
 	static int Pulse = 0;
 
@@ -674,7 +674,7 @@ PLUGIN_API VOID OnPulse()
 	}
 }
 
-PLUGIN_API DWORD OnIncomingChat(PCHAR Line, DWORD Color)
+PLUGIN_API bool OnIncomingChat(const char* Line, DWORD Color)
 {
 	if ( (strstr(Line,"You have gained") && strstr(Line,"ability point") && strstr(Line,"You now have")) || strstr(Line, "You have reached the AA point cap") ) {
 		if(bBruteForce)
