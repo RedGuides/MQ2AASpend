@@ -39,6 +39,8 @@ int curBruteForceIndex = 0;
 int doBruteForce = 0;
 int doBruteForceBonusFirst = 0;
 
+// AutoGrant is now an "Automatic Script" per DBG current expansion - 4.
+unsigned int iAutoGrantExpansion = NUM_EXPANSIONS - 4;
 bool doAutoSpend = false;
 int iAbilityToPurchase = 0;
 int tCount = 0;
@@ -320,7 +322,7 @@ PALTABILITY GetFirstPurchasableAA(bool bBonus)
 			bool cantrain = pAltAdvManager->CanTrainAbility((PcZoneClient*)pPCData, (CAltAbilityData*)pAbility, 0, 0, 0);
 			if (cantrain) {
 				if (bBonus) {
-					if (pAbility->Expansion <= 22)// as of 12/19/2019 gives autogrant up to and including TBM, xpac #22
+					if (pAbility->Expansion <= iAutoGrantExpansion)
 						continue;
 				}
 				if (pAbility->ID == 0)
@@ -550,7 +552,7 @@ void SpendCommand(PSPAWNINFO pChar, PCHAR szLine)
         }
         else if(!_strcmpi(szArg2, "off")) {
             WriteChatf("MQ2AASpend :: Auto Mode Disabled");
-            bAutoSpend = false; 
+            bAutoSpend = false;
             bAutoSpendNow = false;
         }
         else if(!_strcmpi(szArg2, "now")) {
