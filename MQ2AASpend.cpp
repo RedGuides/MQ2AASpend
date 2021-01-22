@@ -197,7 +197,7 @@ void SpendFromINI()
 	bool bBuy = true;
 	//    char *pch;
 	int aaType = 0;
-	unsigned int aaCost = 0;
+	int aaCost = 0;
 	int curLevel = 0;
 	int maxLevel = 0;
 	int level = -1;
@@ -378,7 +378,7 @@ PALTABILITY GetFirstPurchasableAA(bool bBonus)
 void BuySingleAA(PALTABILITY pBruteAbility)
 {
 	int aaType = 0;
-	unsigned int aaCost = 0;
+	int aaCost = 0;
 	int level = -1;
 	if(PSPAWNINFO pMe = (PSPAWNINFO)pLocalPlayer) {
 		level = pMe->Level;
