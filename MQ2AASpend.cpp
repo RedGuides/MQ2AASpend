@@ -429,7 +429,9 @@ CAltAbilityData* GetFirstPurchasableAA(bool bBonus)
 		}
 	}
 
-	WriteChatf("I couldn't find any AA's to purchase, maybe you have them all?");
+	if (!bBruteForce)
+		WriteChatf("I couldn't find any AA's to purchase, maybe you have them all?");
+
 	return nullptr;
 }
 
