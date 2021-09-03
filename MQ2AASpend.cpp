@@ -18,9 +18,15 @@ PLUGIN_VERSION(2.6);
 // The Alternate Ability length converted to decimal is length 10 for a total of 20ish chars, add some padding in case that changes.
 constexpr int MAX_BUYLINE = 32;
 
-// Function Prototypes
-std::vector <std::string> vAAList;
-std::vector <std::string> vAALevel;
+struct AAInfo
+{
+	std::string name;
+	std::string level;
+
+	AAInfo(std::string name_, std::string level_)
+		: name(std::move(name_)), level(std::move(level_)) {}
+};
+std::vector<AAInfo> vAAList;
 
 bool bAutoSpend = false;
 bool bAutoSpendNow = false;
@@ -28,12 +34,9 @@ bool bBruteForce = false;
 bool bBruteForceBonusFirst = false;
 bool bInitDone = false;
 bool bDebug = false;
-// FIXME:  Are these MAX_STRING necessary?
-char iBankPoints[MAX_STRING];
-char SpendOrder[MAX_STRING] = { "35214" };//default order is class focus arch gen and last special
-char szTemp[MAX_STRING];
-char szItem[MAX_STRING];
-char szList[MAX_STRING];
+int iBankPoints = 0;
+std::string SpendOrderString = "35214"; // default order is: class, focus, arch, gen, special
+std::vector<int> SpendOrder = { 3, 5, 2, 1, 4 };
 int curAutoSpendIndex = 0;
 int curBruteForceIndex = 0;
 int doBruteForce = 0;
@@ -45,12 +48,12 @@ bool doAutoSpend = false;
 int iAbilityToPurchase = 0;
 int tCount = 0;
 
-
 void ShowHelp()
 {
 	WriteChatf("\atMQ2AASpend :: v%1.2f :: by Sym\ax", MQ2Version);
 	WriteChatf("/aaspend :: Lists command syntax");
-	if (bInitDone) {
+	if (bInitDone)
+	{
 		WriteChatf("/aaspend status :: Shows current status");
 		WriteChatf("/aaspend add \"AA Name\" maxlevel :: Adds AA Name to ini file, will not purchase past max level. Use M to specify max level");
 		WriteChatf("/aaspend del \"AA Name\" :: Deletes AA Name from ini file");
@@ -69,9 +72,27 @@ void ShowStatus()
 	WriteChatf("Brute Force Mode: %s", bBruteForce ? "\agon\ax" : "\aroff\ax");
 	WriteChatf("Brute Force Bonus AA First: %s", bBruteForceBonusFirst ? "\agon\ax" : "\aroff\ax");
 	WriteChatf("Auto Spend Mode: %s", bAutoSpend ? "\agon\ax" : "\aroff\ax");
-	WriteChatf("Banking \ay%s\ax points", iBankPoints);
-	WriteChatf("Spend Order \ag%s\ax", SpendOrder);
+	WriteChatf("Banking \ay%d\ax points", iBankPoints);
+	WriteChatf("Spend Order \ag%s\ax", SpendOrderString.c_str());
 	WriteChatf("INI has \ay%d\ax abilities listed", vAAList.size());
+}
+
+void UpdateSpendOrder()
+{
+	SpendOrder.clear();
+	if (SpendOrderString.empty())
+	{
+		SpendOrder = { 3, 5, 2, 1, 4 };
+		return;
+	}
+
+	for (char ch : SpendOrderString)
+	{
+		int val = ch - '0';
+
+		if (val >= 0 && val <= 10)
+			SpendOrder.push_back(val);
+	}
 }
 
 void Update_INIFileName()
@@ -83,26 +104,31 @@ void SaveINI()
 {
 	char szKey[MAX_STRING];
 	Update_INIFileName();
-	// write settings
-	sprintf_s(szTemp, "MQ2AASpend_Settings");
-	WritePrivateProfileSection(szTemp, "", INIFileName);
-	WritePrivateProfileString(szTemp, "AutoSpend", bAutoSpend ? "1" : "0", INIFileName);
-	WritePrivateProfileString(szTemp, "BruteForce", bBruteForce ? "1" : "0", INIFileName);
-	WritePrivateProfileString(szTemp, "BruteForceBonusFirst", bBruteForceBonusFirst ? "1" : "0", INIFileName);
-	WritePrivateProfileString(szTemp, "BankPoints", iBankPoints, INIFileName);
-	WritePrivateProfileString(szTemp, "SpendOrder", SpendOrder, INIFileName);
 
+	// write settings
+	std::string sectionName = "MQ2AASpend_Settings";
+	WritePrivateProfileSection(sectionName, "", INIFileName);
+	WritePrivateProfileString(sectionName, "AutoSpend", bAutoSpend ? "1" : "0", INIFileName);
+	WritePrivateProfileString(sectionName, "BruteForce", bBruteForce ? "1" : "0", INIFileName);
+	WritePrivateProfileString(sectionName, "BruteForceBonusFirst", bBruteForceBonusFirst ? "1" : "0", INIFileName);
+	WritePrivateProfileInt(sectionName, "BankPoints", iBankPoints, INIFileName);
+	WritePrivateProfileString(sectionName, "SpendOrder", SpendOrderString, INIFileName);
 
 	// write all abilites
-	sprintf_s(szTemp, "MQ2AASpend_AAList");
-	WritePrivateProfileSection(szTemp, "", INIFileName);
-	if (!vAAList.empty()) {
-		for (unsigned int a = 0; a < vAAList.size(); a++) {
-			std::string& vRef = vAAList[a];
-			std::string& vLevelRef = vAALevel[a];
-			sprintf_s(szItem, "%s|%s", vRef.c_str(), vLevelRef.c_str());
+	sectionName = "MQ2AASpend_AAList";
+	WritePrivateProfileSection(sectionName, "", INIFileName);
+
+	char szItem[MAX_STRING];
+
+	if (!vAAList.empty())
+	{
+		for (size_t a = 0; a < vAAList.size(); a++)
+		{
+			AAInfo& info = vAAList[a];
+
+			sprintf_s(szItem, "%s|%s", info.name.c_str(), info.level.c_str());
 			sprintf_s(szKey, "%d", a);
-			WritePrivateProfileString(szTemp, szKey, szItem, INIFileName);
+			WritePrivateProfileString(sectionName, szKey, szItem, INIFileName);
 		}
 	}
 
@@ -112,65 +138,73 @@ void SaveINI()
 void LoadINI()
 {
 	Update_INIFileName();
+
 	// get settings
-	sprintf_s(szTemp, "MQ2AASpend_Settings");
-	bAutoSpend = GetPrivateProfileInt(szTemp, "AutoSpend", 1, INIFileName) > 0 ? true : false;
-	bBruteForce = GetPrivateProfileInt(szTemp, "BruteForce", 0, INIFileName) > 0 ? true : false;
-	bBruteForceBonusFirst = GetPrivateProfileInt(szTemp, "BruteForceBonusFirst", 0, INIFileName) > 0 ? true : false;
-	GetPrivateProfileString(szTemp, "BankPoints", "0", iBankPoints, MAX_STRING, INIFileName);
-	GetPrivateProfileString(szTemp, "SpendOrder", "35214", SpendOrder, MAX_STRING, INIFileName);
+	std::string sectionName = "MQ2AASpend_Settings";
+	bAutoSpend = GetPrivateProfileInt(sectionName, "AutoSpend", 1, INIFileName) > 0 ? true : false;
+	bBruteForce = GetPrivateProfileInt(sectionName, "BruteForce", 0, INIFileName) > 0 ? true : false;
+	bBruteForceBonusFirst = GetPrivateProfileInt(sectionName, "BruteForceBonusFirst", 0, INIFileName) > 0 ? true : false;
+	iBankPoints = GetPrivateProfileInt(sectionName, "BankPoints", 0, INIFileName);
+	SpendOrderString = GetPrivateProfileString(sectionName, "SpendOrder", "35214", INIFileName);
+	UpdateSpendOrder();
 
 	// get all abilites
-	sprintf_s(szTemp, "MQ2AASpend_AAList");
-	//GetPrivateProfileSection(szTemp,szList,MAX_STRING,INIFileName);
-	GetPrivateProfileString(szTemp, nullptr, "0", szList, MAX_STRING, INIFileName);
-
+	char szList[MAX_STRING];
+	GetPrivateProfileString("MQ2AASpend_AAList", nullptr, "0", szList, MAX_STRING, INIFileName);
 
 	// clear lists
 	vAAList.clear();
-	vAALevel.clear();
 
 	char* p = (char*)szList;
 	char* pch = 0;
 	char* Next_Token1 = 0;
 	size_t length = 0;
 	int i = 0;
+	char szItem[MAX_STRING];
+
 	// loop through all entries under _AAList
 	// values are terminated by \0, final value is teminated with \0\0
 	// values look like
 	// 1=Gate|M
 	// 2=Innate Agility|5
-	if (strlen(p)) {
-		while (*p) {
-			length = strlen(p);
-			GetPrivateProfileString(szTemp, p, "", szItem, MAX_STRING, INIFileName);
-			// split entries on =
-			if (!strstr(szItem, "|")) {
-				WriteChatf("\arMQ2AASpend :: %s=%s isn't in valid format, deleting...\ax", p, szItem);
-				p += length;
-				p++;
-				continue;
-			}
-			pch = strtok_s(szItem, "|", &Next_Token1);
-			if (i++ > 500) {
-				WriteChatf("\arMQ2AASpend :: There is a limit of 500 abilities in the ini file. Remove some maxxed entries if you want to add new abilities.\ax");
-				break;
-			}
-			while (pch != nullptr) {
-				DebugSpew("pch = %s", pch);
-				// Odd entries are the names. Add it to the list
-				vAAList.push_back(pch);
+	while (*p)
+	{
+		length = strlen(p);
+		GetPrivateProfileString("MQ2AASpend_AAList", p, "", szItem, MAX_STRING, INIFileName);
 
-				// next is maxlevel of ability. Add it to the level list.
-				pch = strtok_s(nullptr, "|", &Next_Token1);
-				vAALevel.push_back(pch);
-
-				// next name
-				pch = strtok_s(nullptr, "|", &Next_Token1);
-			}
+		// split entries on =
+		if (!strstr(szItem, "|"))
+		{
+			WriteChatf("\arMQ2AASpend :: %s=%s isn't in valid format, deleting...\ax", p, szItem);
 			p += length;
 			p++;
+			continue;
 		}
+
+		pch = strtok_s(szItem, "|", &Next_Token1);
+		if (i++ > 500)
+		{
+			WriteChatf("\arMQ2AASpend :: There is a limit of 500 abilities in the ini file. Remove some maxxed entries if you want to add new abilities.\ax");
+			break;
+		}
+
+		while (pch != nullptr)
+		{
+			DebugSpew("pch = %s", pch);
+
+			// Odd entries are the names. Add it to the list
+			std::string name = pch;
+
+			// next is maxlevel of ability. Add it to the level list.
+			pch = strtok_s(nullptr, "|", &Next_Token1);
+			std::string level = pch;
+			vAAList.emplace_back(std::move(name), std::move(level));
+
+			// next name
+			pch = strtok_s(nullptr, "|", &Next_Token1);
+		}
+		p += length;
+		p++;
 	}
 
 	// flag first load init as done
@@ -180,8 +214,11 @@ void LoadINI()
 
 bool CheckWindowValue(PCHAR szToCheck)
 {
+	char szTemp[MAX_STRING];
 	sprintf_s(szTemp, "%s", szToCheck);
+
 	ParseMacroData(szTemp, sizeof(szTemp));
+
 	//WriteChatf("%s :: %s", szToCheck, szTemp);
 	if (strcmp(szTemp, "TRUE") == 0) return true;
 	if (strcmp(szTemp, "NULL") != 0) return false;
@@ -192,7 +229,7 @@ bool CheckWindowValue(PCHAR szToCheck)
 void SpendFromINI()
 {
 	if (!pLocalPlayer) return;
-	if (!bAutoSpendNow && static_cast<int>(GetPcProfile()->AAPoints) < GetIntFromString(iBankPoints, 0)) return;
+	if (!bAutoSpendNow && GetPcProfile()->AAPoints < iBankPoints) return;
 	if (vAAList.empty()) return;
 
 	bool bBuy = true;
@@ -202,89 +239,104 @@ void SpendFromINI()
 	int maxLevel = 0;
 	int level = pLocalPlayer->Level;
 
-	for (unsigned int a = 0; a < vAAList.size(); a++)
+	for (const AAInfo& info : vAAList)
 	{
-		std::string& vRef = vAAList[a];
-		std::string& vLevelRef = vAALevel[a];
+		const std::string& vRef = info.name;
+		const std::string& vLevelRef = info.level;
+
 		if (bDebug)
 			WriteChatf("MQ2AASpend :: Have %s from ini, checking...", vRef.c_str());
 		bBuy = true;
 
 		int index = GetAAIndexByName((PCHAR)vRef.c_str());
-		if (PALTABILITY pAbility = GetAAByIdWrapper(index, level)) {
+		if (CAltAbilityData* pAbility = GetAAByIdWrapper(index, level))
+		{
 			aaType = pAbility->Type;
-			if (!aaType) {
+			if (!aaType)
+			{
 				if (bDebug)
 					WriteChatf("MQ2AASpend :: %s is \arNOT available\ax for purchase.", vRef.c_str());
 				continue;
 			}
+
 			aaCost = pAbility->Cost;
 			curLevel = pAbility->CurrentRank;
 			maxLevel = pAbility->MaxRank;
 
-			PALTABILITY pNextAbility = GetAAByIdWrapper(pAbility->NextGroupAbilityId, level);
-			if (pNextAbility)
+			if (CAltAbilityData* pNextAbility = GetAAByIdWrapper(pAbility->NextGroupAbilityId, level))
 				pAbility = pNextAbility;
-			bool cantrain = pAltAdvManager->CanTrainAbility(pCharData, (CAltAbilityData*)pAbility, 0, 0, 0);
-			if (!cantrain) {
+
+			if (!pAltAdvManager->CanTrainAbility(pLocalPC, pAbility))
+			{
 				if (bDebug)
 					WriteChatf("MQ2AASpend :: %s is \arNOT available\ax for purchase.", vRef.c_str());
 				continue;
 			}
+
 			if (bDebug)
 				WriteChatf("MQ2AASpend :: %s is \agavailable\ax for purchase. Cost is %d, tab is %d", vRef.c_str(), aaCost, aaType);
 			if (bDebug)
 				WriteChatf("MQ2AASpend :: %s current level is %d", vRef.c_str(), curLevel);
-			if (curLevel == maxLevel) {
+
+			if (curLevel == maxLevel)
+			{
 				if (bDebug)
 					WriteChatf("MQ2AASpend :: %s is currently maxxed, skipping", vRef.c_str());
 				continue;
 			}
-			else {
-				if (!_stricmp(vLevelRef.c_str(), "M")) {
+			else
+			{
+				if (!_stricmp(vLevelRef.c_str(), "M"))
+				{
 					bBuy = true;
 				}
-				else {
+				else
+				{
 					int b = GetIntFromString(vLevelRef.c_str(), MAX_PC_LEVEL + 1);
-					if (curLevel >= b) {
+					if (curLevel >= b)
+					{
 						if (bDebug)
 							WriteChatf("MQ2AASpend :: %s max level has been reached per ini setting, skipping", vRef.c_str());
 						continue;
 					}
 				}
 			}
-			if (GetPcProfile()->AAPoints >= aaCost) {
-				if (bBuy) {
+
+			if (GetPcProfile()->AAPoints >= aaCost)
+			{
+				if (bBuy)
+				{
 					WriteChatf("MQ2AASpend :: Attempting to purchase level %d of %s for %d point%s.", curLevel + 1, vRef.c_str(), aaCost, aaCost > 1 ? "s" : "");
-					if (!bDebug) {
+					if (!bDebug)
+					{
 						char szCommand[MAX_BUYLINE] = { 0 };
-#if !defined(ROF2EMU) && !defined(UFEMU)
 						sprintf_s(szCommand, "/alt buy %d", pAbility->ID);
-#else
-						sprintf_s(szCommand, "/alt buy %d", pAbility->Index);
-#endif
+
 						DoCommand(GetCharInfo()->pSpawn, szCommand);
 					}
-					else {
+					else
+					{
 						WriteChatf("MQ2AASpend :: Debugging so I wont actually buy %s", vRef.c_str());
 					}
+
 					break;
 				}
 			}
-			else {
+			else
+			{
 				WriteChatf("MQ2AASpend :: Not enough points to buy %s, skipping", vRef.c_str());
 			}
 		}
 	}
 }
 
-std::map<DWORD, PALTABILITY>generalmap;//1
-std::map<DWORD, PALTABILITY>archtypemap;//2
-std::map<DWORD, PALTABILITY>classmap;//3
-std::map<DWORD, PALTABILITY>specialmap;//4
-std::map<DWORD, PALTABILITY>focusmap;//5
+std::map<DWORD, CAltAbilityData*> generalmap;   // 1
+std::map<DWORD, CAltAbilityData*> archtypemap;  // 2
+std::map<DWORD, CAltAbilityData*> classmap;     // 3
+std::map<DWORD, CAltAbilityData*> specialmap;   // 4
+std::map<DWORD, CAltAbilityData*> focusmap;     // 5
 
-std::map<DWORD, PALTABILITY>& GetMapByOrder(int order)
+std::map<DWORD, CAltAbilityData*>& GetMapByOrder(int order)
 {
 	switch (order)
 	{
@@ -303,36 +355,45 @@ std::map<DWORD, PALTABILITY>& GetMapByOrder(int order)
 	}
 }
 
-PALTABILITY GetFirstPurchasableAA(bool bBonus)
+CAltAbilityData* GetFirstPurchasableAA(bool bBonus)
 {
+	if (!pLocalPlayer || !pLocalPC) return nullptr;
+
 	generalmap.clear();
 	archtypemap.clear();
 	classmap.clear();
 	specialmap.clear();
 	focusmap.clear();
-	int level = -1;
-	if (PSPAWNINFO pMe = (PSPAWNINFO)pLocalPlayer) {
-		level = pMe->Level;
-	}
+
+	int level = pLocalPlayer->Level;
+
 	for (int nAbility = 0; nAbility < NUM_ALT_ABILITIES; nAbility++)
 	{
-		if (PALTABILITY pAbility = GetAAByIdWrapper(nAbility, level)) {
-			PALTABILITY pNextAbility = GetAAByIdWrapper(pAbility->NextGroupAbilityId, level);
-			if (pNextAbility)
+		if (CAltAbilityData* pAbility = GetAAByIdWrapper(nAbility, level))
+		{
+			if (CAltAbilityData* pNextAbility = GetAAByIdWrapper(pAbility->NextGroupAbilityId, level))
 				pAbility = pNextAbility;
-			bool cantrain = pAltAdvManager->CanTrainAbility(pCharData, (CAltAbilityData*)pAbility, 0, 0, 0);
-			if (cantrain) {
-				if (bBonus) {
-					if (pAbility->Expansion <= iAutoGrantExpansion)
-						continue;
-				}
+
+			if (bBonus)
+			{
+				if (pAbility->Expansion <= iAutoGrantExpansion)
+					continue;
+			}
+
+			// Check if we can train it.
+			if (pAltAdvManager->CanTrainAbility(pLocalPC, pAbility))
+			{
 				if (pAbility->ID == 0)
-					continue;//hidden communion of the cheetah is not valid and has this id, but is still sent down to the client
-				if (bDebug) {
-					if (const char* AAName = pCDBStr->GetString(pAbility->nName, eAltAbilityName, nullptr)) {
+					continue;// hidden communion of the cheetah is not valid and has this id, but is still sent down to the client
+
+				if (bDebug)
+				{
+					if (const char* AAName = pDBStr->GetString(pAbility->nName, eAltAbilityName))
+					{
 						WriteChatf("Adding %s (expansion:%d) to the %d map", AAName, pAbility->Expansion, pAbility->Type);
 					}
 				}
+
 				switch (pAbility->Type)
 				{
 				case 1:
@@ -357,67 +418,72 @@ PALTABILITY GetFirstPurchasableAA(bool bBonus)
 			}
 		}
 	}
-	//spend in this order:
-	//class, focus, archtype, general, special
-	std::string sorder = SpendOrder;
-	int order[5] = { 3, 5, 2, 1, 4 };
-	std::string temp;
-	int j = 0;
-	for (std::string::iterator i = sorder.begin(); i != sorder.end(); i++, j++) {
-		temp = (*i);
-		order[j] = GetIntFromString(temp.c_str(), 0);
-	}
-	for (int i = 0; i < 5; i++) {
-		std::map<DWORD, PALTABILITY>& retmap = GetMapByOrder(order[i]);
+
+	// spend in the specified order:
+	for (int order : SpendOrder)
+	{
+		std::map<DWORD, CAltAbilityData*>& retmap = GetMapByOrder(order);
 		if (!retmap.empty())
+		{
 			return retmap.begin()->second;
+		}
 	}
+
 	WriteChatf("I couldn't find any AA's to purchase, maybe you have them all?");
 	return nullptr;
 }
 
-void BuySingleAA(PALTABILITY pBruteAbility)
+void BuySingleAA(CAltAbilityData* pBruteAbility)
 {
+	if (!pLocalPlayer) return;
+
 	int aaType = 0;
 	int aaCost = 0;
-	int level = -1;
-	if (PSPAWNINFO pMe = (PSPAWNINFO)pLocalPlayer) {
-		level = pMe->Level;
-	}
+	int level = pLocalPlayer->Level;
+
 	int curLevel = 0;
-	if (PALTABILITY pAbility = pBruteAbility) {
-		if (const char* AAName = pCDBStr->GetString(pBruteAbility->nName, eAltAbilityName, nullptr)) {
+
+	if (CAltAbilityData* pAbility = pBruteAbility)
+	{
+		if (const char* AAName = pDBStr->GetString(pBruteAbility->nName, eAltAbilityName))
+		{
 			aaType = pAbility->Type;
-			if (!aaType) {
+			if (!aaType)
+			{
 				WriteChatf("MQ2AASpend :: Unable to purchase %s", AAName);
 				return;
 			}
+
 			aaCost = pAbility->Cost;
 			curLevel = pAbility->CurrentRank;
-			PALTABILITY pNextAbility = GetAAByIdWrapper(pAbility->NextGroupAbilityId, level);
-			if (pNextAbility)
+
+			if (CAltAbilityData* pNextAbility = GetAAByIdWrapper(pAbility->NextGroupAbilityId, level))
 				pAbility = pNextAbility;
-			bool cantrain = pAltAdvManager->CanTrainAbility(pCharData, (CAltAbilityData*)pAbility, 0, 0, 0);
-			if (!cantrain) {
+
+			if (!pAltAdvManager->CanTrainAbility(pLocalPC, pAbility))
+			{
 				WriteChatf("MQ2AASpend :: You can't train %s for some reason , aborting", AAName);
 				return;
 			}
-			if (GetPcProfile()->AAPoints >= aaCost) {
+
+			if (GetPcProfile()->AAPoints >= aaCost)
+			{
 				WriteChatf("MQ2AASpend :: Attempting to purchase level %d of %s for %d point%s.", curLevel + 1, AAName, aaCost, aaCost > 1 ? "s" : "");
-				if (!bDebug) {
+
+				if (!bDebug)
+				{
 					char szCommand[MAX_BUYLINE] = { 0 };
-#if !defined(ROF2EMU) && !defined(UFEMU)
 					sprintf_s(szCommand, "/alt buy %d", pAbility->ID);
-#else
-					sprintf_s(szCommand, "/alt buy %d", pAbility->Index);
-#endif
+
 					DoCommand(GetCharInfo()->pSpawn, szCommand);
 				}
-				else {
+				else
+				{
 					WriteChatf("MQ2AASpend :: Debugging so I wont actually buy %s", AAName);
 				}
 			}
-			else {
+			else
+			{
 				WriteChatf("MQ2AASpend :: Not enough points to buy %s, aborting", AAName);
 			}
 		}
@@ -426,51 +492,65 @@ void BuySingleAA(PALTABILITY pBruteAbility)
 
 void BruteForceBonusFirstPurchase(int mode)
 {
-	if (mode != 2 && static_cast<int>(GetPcProfile()->AAPoints) < GetIntFromString(iBankPoints, 0))
+	if (mode != 2 && GetPcProfile()->AAPoints < iBankPoints)
 		return;
+
 	DebugSpew("MQ2AASpend :: Starting Brute Force Bonus First Purchase");
-	if (PALTABILITY pBruteAbility = GetFirstPurchasableAA(true)) {
-		if (const char* AAName = pCDBStr->GetString(pBruteAbility->nName, eAltAbilityName, nullptr)) {
-			if (!bDebug) {
+
+	if (CAltAbilityData* pBruteAbility = GetFirstPurchasableAA(true))
+	{
+		if (const char* AAName = pDBStr->GetString(pBruteAbility->nName, eAltAbilityName))
+		{
+			if (!bDebug)
+			{
 				BuySingleAA(pBruteAbility);
 			}
-			else {
+			else
+			{
 				WriteChatf("DEBUG: Buying(not really) %s", AAName);
 			}
 		}
 	}
+
 	DebugSpew("MQ2AASpend :: Brute Force Purchase Complete");
 }
 
 void BruteForcePurchase(int mode)
 {
-
-	if (mode != 2 && static_cast<int>(GetPcProfile()->AAPoints) < GetIntFromString(iBankPoints, 0))
+	if (mode != 2 && GetPcProfile()->AAPoints < iBankPoints)
 		return;
+
 	DebugSpew("MQ2AASpend :: Starting Brute Force Purchase");
-	if (PALTABILITY pBruteAbility = GetFirstPurchasableAA(false)) {
-		if (const char* AAName = pCDBStr->GetString(pBruteAbility->nName, eAltAbilityName, nullptr)) {
-			if (!bDebug) {
+
+	if (CAltAbilityData* pBruteAbility = GetFirstPurchasableAA(false))
+	{
+		if (const char* AAName = pDBStr->GetString(pBruteAbility->nName, eAltAbilityName))
+		{
+			if (!bDebug)
+			{
 				BuySingleAA(pBruteAbility);
 			}
-			else {
+			else
+			{
 				WriteChatf("DEBUG: Buying(not really) %s", AAName);
 			}
 		}
 	}
+
 	DebugSpew("MQ2AASpend :: Brute Force Purchase Complete");
 }
 
 PLUGIN_API void SetGameState(int GameState)
 {
-	if (GameState == GAMESTATE_INGAME) {
+	if (GameState == GAMESTATE_INGAME)
+	{
 		if (!bInitDone) LoadINI();
 	}
-	else if (GameState != GAMESTATE_LOGGINGIN) {
+	else if (GameState != GAMESTATE_LOGGINGIN)
+	{
 		if (bInitDone) bInitDone = false;
 	}
 }
-
 
 void SpendCommand(PSPAWNINFO pChar, PCHAR szLine)
 {
@@ -481,176 +561,253 @@ void SpendCommand(PSPAWNINFO pChar, PCHAR szLine)
 	GetArg(szArg2, szLine, 2);
 	GetArg(szArg3, szLine, 3);
 
-	if (!_strcmpi(szArg1, "")) {
+	if (!_strcmpi(szArg1, ""))
+	{
 		ShowHelp();
+		return;
 	}
-	else if (!_strcmpi(szArg1, "debug")) {
-		if (!_strcmpi(szArg2, "on")) {
+
+	if (!_strcmpi(szArg1, "debug"))
+	{
+		if (!_strcmpi(szArg2, "on"))
+		{
 			bDebug = true;
 		}
-		else if (!_strcmpi(szArg2, "off")) {
+		else if (!_strcmpi(szArg2, "off"))
+		{
 			bDebug = false;
 		}
+
 		WriteChatf("MQ2AASpend :: Debug is %s", bDebug ? "\agON\ax" : "\arOFF\ax");
+		return;
 	}
-	else if (!_strcmpi(szArg1, "status")) {
+
+	if (!_strcmpi(szArg1, "status"))
+	{
 		ShowStatus();
+		return;
 	}
-	else if (!_strcmpi(szArg1, "load")) {
+
+	if (!_strcmpi(szArg1, "load"))
+	{
 		LoadINI();
+		return;
 	}
-	else if (!_strcmpi(szArg1, "save")) {
+
+	if (!_strcmpi(szArg1, "save"))
+	{
 		SaveINI();
+		return;
 	}
-	else if (!_strcmpi(szArg1, "brute")) {
-		if (!_strcmpi(szArg2, "")) {
+
+	if (!_strcmpi(szArg1, "brute"))
+	{
+		if (!_strcmpi(szArg2, ""))
+		{
 			WriteChatf("Usage: /aaspend brute on|off|now");
 			WriteChatf("       This will auto buy AA's based on ini values on next ding, or now if now specified.");
 		}
-		else if (!_strcmpi(szArg2, "on")) {
+		else if (!_strcmpi(szArg2, "on"))
+		{
 			WriteChatf("MQ2AASpend :: Brute Force Mode Enabled -- Buying AA's in order of appearence, from class to general, then special");
 			bBruteForce = true;
 			bBruteForceBonusFirst = false;
 			bAutoSpend = false;
 		}
-		else if (!_strcmpi(szArg2, "off")) {
+		else if (!_strcmpi(szArg2, "off"))
+		{
 			WriteChatf("MQ2AASpend :: Brute Force Mode Disabled");
 			bBruteForce = false;
 		}
-		else if (!_strcmpi(szArg2, "now")) {
+		else if (!_strcmpi(szArg2, "now"))
+		{
 			WriteChatf("MQ2AASpend :: Brute Force Mode Active Now");
 			doBruteForce = 2;
 		}
+
+		return;
 	}
-	else if (!_strcmpi(szArg1, "bonus")) {
-		if (!_strcmpi(szArg2, "")) {
+
+	if (!_strcmpi(szArg1, "bonus"))
+	{
+		if (!_strcmpi(szArg2, ""))
+		{
 			WriteChatf("Usage: /aaspend bonus on|off|now");
 			WriteChatf("       This will auto buy AA's based on bonusAA first, in other words, from expansions post autogrant only.");
 		}
-		else if (!_strcmpi(szArg2, "on")) {
+		else if (!_strcmpi(szArg2, "on"))
+		{
 			WriteChatf("MQ2AASpend :: Brute Force Bonus Mode Enabled -- Buying AA's from expansions post autogrant only.");
+
 			bBruteForce = false;
 			bBruteForceBonusFirst = true;
 			bAutoSpend = false;
 		}
-		else if (!_strcmpi(szArg2, "off")) {
+		else if (!_strcmpi(szArg2, "off"))
+		{
 			WriteChatf("MQ2AASpend :: Brute Force Bonus Mode Disabled");
+
 			bBruteForceBonusFirst = false;
 		}
-		else if (!_strcmpi(szArg2, "now")) {
+		else if (!_strcmpi(szArg2, "now"))
+		{
 			WriteChatf("MQ2AASpend :: Brute Force Bonus Mode Active Now");
+
 			doBruteForceBonusFirst = 2;
 		}
+
+		return;
 	}
-	else if (!_strcmpi(szArg1, "auto")) {
-		if (!_strcmpi(szArg2, "")) {
+
+	if (!_strcmpi(szArg1, "auto"))
+	{
+		if (!_strcmpi(szArg2, ""))
+		{
 			WriteChatf("Usage: /aaspend auto on|off|now");
 			WriteChatf("       This will auto buy AA's based on ini values on next ding, or now if now specified.");
 		}
-		else if (!_strcmpi(szArg2, "on")) {
+		else if (!_strcmpi(szArg2, "on"))
+		{
 			WriteChatf("MQ2AASpend :: Auto Mode Enabled -- Buying AA's based on ini values");
+
 			bAutoSpend = true;
 			bBruteForce = false;
 			bBruteForceBonusFirst = false;
 			bAutoSpendNow = false;
 		}
-		else if (!_strcmpi(szArg2, "off")) {
+		else if (!_strcmpi(szArg2, "off"))
+		{
 			WriteChatf("MQ2AASpend :: Auto Mode Disabled");
+
 			bAutoSpend = false;
 			bAutoSpendNow = false;
 		}
-		else if (!_strcmpi(szArg2, "now")) {
+		else if (!_strcmpi(szArg2, "now"))
+		{
 			WriteChatf("MQ2AASpend :: Auto Mode Active Now");
-			if (!vAAList.empty()) {
+
+			if (!vAAList.empty())
+			{
 				doAutoSpend = true;
 				bAutoSpendNow = true;
 			}
 		}
+
+		return;
 	}
-	else if (!_strcmpi(szArg1, "bank")) {
-		if (!_strcmpi(szArg2, "")) {
+
+	if (!_strcmpi(szArg1, "bank"))
+	{
+		if (!_strcmpi(szArg2, ""))
+		{
 			WriteChatf("Usage: /aaspend bank #");
 			WriteChatf("       This will keep a minimum of # aa points before auto spending or brute force spending.");
 		}
-		else {
-			sprintf_s(iBankPoints, "%s", szArg2);
-			WriteChatf("MQ2AASpend :: Banking %s points", szArg2);
+		else
+		{
+			iBankPoints = GetIntFromString(szArg2, 0);
+			WriteChatf("MQ2AASpend :: Banking %d points", iBankPoints);
+
 			SaveINI();
 		}
+
+		return;
 	}
-	else if (!_strcmpi(szArg1, "order")) {
-		if (!_strcmpi(szArg2, "")) {
+
+	if (!_strcmpi(szArg1, "order"))
+	{
+		if (!_strcmpi(szArg2, ""))
+		{
 			WriteChatf("Usage: /aaspend order \ag#####\ax where ##### is 5 numbers representing 5 tabs in the aa window.");
 			WriteChatf("       General is 1 ArchType is 2 Class is 3 Special is 4 and Focus is 5.");
 			WriteChatf("       Example: Lets say you want to spend in this order: Class, Focus, Archtype, General and last Special, you would then type: \ay/aaspend order 35214\ax");
 		}
-		else {
-			sprintf_s(SpendOrder, "%s", szArg2);
+		else
+		{
+			SpendOrderString = szArg2;
 			WriteChatf("MQ2AASpend :: New Spend Order is %s", szArg2);
+
+			UpdateSpendOrder();
 			SaveINI();
 		}
+
+		return;
 	}
-	else if (!_strcmpi(szArg1, "add")) {
-		if (!_strcmpi(szArg2, "") || !_strcmpi(szArg3, "")) {
+
+	if (!_strcmpi(szArg1, "add"))
+	{
+		if (!_strcmpi(szArg2, "") || !_strcmpi(szArg3, ""))
+		{
 			WriteChatf("Usage: /aaspend add \"AA Name\" maxlevel");
 			WriteChatf("        maxlevel can be a number or m or M for max available.");
 		}
-		else {
-			for (unsigned int a = 0; a < vAAList.size(); a++) {
-				std::string& vRef = vAAList[a];
-				if (!_stricmp(szArg2, vRef.c_str())) {
-					WriteChatf("MQ2AASpend :: Ability %s already exists", szTemp);
+		else
+		{
+			for (const AAInfo& info : vAAList)
+			{
+				if (ci_equals(szArg2, info.name))
+				{
+					WriteChatf("MQ2AASpend :: Ability %s already exists", info.name.c_str());
 					return;
 				}
 			}
 
-			vAAList.push_back(szArg2);
-			vAALevel.push_back(szArg3);
+			vAAList.emplace_back(szArg2, szArg3);
+
 			WriteChatf("MQ2AASpend :: Added %s levels of %s to ini", szArg3, szArg2);
 			SaveINI();
 		}
+
+		return;
 	}
-	else if (!_strcmpi(szArg1, "del")) {
+
+	if (!_strcmpi(szArg1, "del"))
+	{
 		int delIndex = -1;
-		if (!_strcmpi(szArg2, "")) {
+		if (!_strcmpi(szArg2, ""))
+		{
 			WriteChatf("Usage: /aaspend del \"AA Name\"");
 		}
-		else {
-			for (unsigned int a = 0; a < vAAList.size(); a++) {
-				std::string& vRef = vAAList[a];
-				if (!_stricmp(szArg2, vRef.c_str())) {
-					delIndex = a;
-				}
-			}
-			if (delIndex >= 0) {
-				vAAList.erase(vAAList.begin() + delIndex);
-				vAALevel.erase(vAALevel.begin() + delIndex);
-				WriteChatf("MQ2AASpend :: Deleted ability %s from ini", szTemp);
+		else
+		{
+			auto iter = std::find_if(vAAList.begin(), vAAList.end(), [&](const AAInfo& info) { return ci_equals(szArg2, info.name); });
+
+			if (iter != vAAList.end())
+			{
+				vAAList.erase(iter);
+
+				WriteChatf("MQ2AASpend :: Deleted ability %s from ini", szArg2);
 				SaveINI();
 			}
-			else {
-				WriteChatf("MQ2AASpend :: Abilty %s not found in ini", szTemp);
+			else
+			{
+				WriteChatf("MQ2AASpend :: Abilty %s not found in ini", szArg2);
 			}
 		}
+
+		return;
 	}
-	else if (!_strcmpi(szArg1, "buy")) {
-		if (!_strcmpi(szArg2, "")) {
+
+	if (!_strcmpi(szArg1, "buy"))
+	{
+		if (!_strcmpi(szArg2, ""))
+		{
 			WriteChatf("Usage: /aaspend buy \"AA Name\"");
 		}
-		else {
-			int level = -1;
-			if (PSPAWNINFO pMe = (PSPAWNINFO)pLocalPlayer) {
-				level = pMe->Level;
-			}
-			int index = GetAAIndexByName((PCHAR)szArg2);
-			if (PALTABILITY pAbility = GetAAByIdWrapper(index, level)) {
+		else if (pLocalPlayer)
+		{
+			int index = GetAAIndexByName(szArg2);
+
+			if (CAltAbilityData* pAbility = GetAAByIdWrapper(index, pLocalPlayer->Level))
+			{
 				BuySingleAA(pAbility);
 			}
 		}
+
+		return;
 	}
-	else {
-		ShowHelp();
-	}
+	
+	ShowHelp();
 }
 
 // This is called every time MQ pulses
@@ -667,17 +824,20 @@ PLUGIN_API void OnPulse()
 
 	Pulse = 0;
 
-	if (doBruteForce != 0) {
+	if (doBruteForce != 0)
+	{
 		BruteForcePurchase(doBruteForce);
 		doBruteForce = 0;
 	}
 
-	if (doBruteForceBonusFirst != 0) {
+	if (doBruteForceBonusFirst != 0)
+	{
 		BruteForceBonusFirstPurchase(doBruteForceBonusFirst);
 		doBruteForceBonusFirst = 0;
 	}
 
-	if (doAutoSpend && !vAAList.empty()) {
+	if (doAutoSpend && !vAAList.empty())
+	{
 		SpendFromINI();
 		doAutoSpend = false;
 		bAutoSpendNow = false;
@@ -686,7 +846,8 @@ PLUGIN_API void OnPulse()
 
 PLUGIN_API bool OnIncomingChat(const char* Line, DWORD Color)
 {
-	if ((strstr(Line, "You have gained") && strstr(Line, "ability point") && strstr(Line, "You now have")) || strstr(Line, "You have reached the AA point cap")) {
+	if ((strstr(Line, "You have gained") && strstr(Line, "ability point") && strstr(Line, "You now have")) || strstr(Line, "You have reached the AA point cap"))
+	{
 		if (bBruteForce)
 			doBruteForce = 1;
 		if (bBruteForceBonusFirst)
@@ -694,7 +855,9 @@ PLUGIN_API bool OnIncomingChat(const char* Line, DWORD Color)
 		if (bAutoSpend && !vAAList.empty())
 			doAutoSpend = true;
 	}
-	if (strstr(Line, "Welcome to level")) {
+
+	if (strstr(Line, "Welcome to level"))
+	{
 		if (bBruteForce)
 			doBruteForce = 1;
 		if (bBruteForceBonusFirst)
@@ -702,6 +865,7 @@ PLUGIN_API bool OnIncomingChat(const char* Line, DWORD Color)
 		if (bAutoSpend && !vAAList.empty())
 			doAutoSpend = true;
 	}
+
 	return 0;
 }
 
