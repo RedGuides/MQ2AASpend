@@ -62,7 +62,7 @@ void ShowHelp()
 		WriteChatf("/aaspend bonus on|off|now :: Buys first available ability BONUS AA on ding, or now if specified. Default \ar*OFF*\ax");
 		WriteChatf("/aaspend auto on|off|now :: Autospends AA's based on ini on ding, or now if specified. Default \ag*ON*\ax");
 		WriteChatf("/aaspend bank # :: Keeps this many AA points banked before auto/brute spending. Default \ay0\ax.");
-		WriteChatf("/aaspend order ##### :: Sets the Spend Order.\ayDefault is 35214 (class,focus,arch,gen,special)\ax.");
+		WriteChatf("/aaspend order ##### :: Sets the Spend Order.\ay Default is 35214 (class, focus, arch, gen, special)\ax.");
 	}
 }
 
@@ -355,7 +355,7 @@ std::map<DWORD, CAltAbilityData*>& GetMapByOrder(int order)
 	}
 }
 
-CAltAbilityData* GetFirstPurchasableAA(bool bBonus)
+CAltAbilityData* GetFirstPurchasableAA(bool bBonus, bool bNext)
 {
 	if (!pLocalPlayer || !pLocalPC) return nullptr;
 
@@ -366,12 +366,15 @@ CAltAbilityData* GetFirstPurchasableAA(bool bBonus)
 	focusmap.clear();
 
 	int level = pLocalPlayer->Level;
+	CAltAbilityData* pPrevAbility = nullptr;
 
 	for (int nAbility = 0; nAbility < NUM_ALT_ABILITIES; nAbility++)
 	{
 		if (CAltAbilityData* pAbility = GetAAByIdWrapper(nAbility, level))
 		{
-			if (CAltAbilityData* pNextAbility = GetAAByIdWrapper(pAbility->NextGroupAbilityId, level))
+			pPrevAbility = pAbility;
+			CAltAbilityData* pNextAbility = GetAAByIdWrapper(pAbility->NextGroupAbilityId, level);
+			if (pNextAbility)
 				pAbility = pNextAbility;
 
 			if (bBonus)
@@ -390,26 +393,29 @@ CAltAbilityData* GetFirstPurchasableAA(bool bBonus)
 				{
 					if (const char* AAName = pDBStr->GetString(pAbility->nName, eAltAbilityName))
 					{
-						WriteChatf("Adding %s (expansion:%d) to the %d map", AAName, pAbility->Expansion, pAbility->Type);
+						WriteChatf("Adding \ay%s\ax (expansion:\ag%d\ax) to the \ao%d\ax map", AAName, pAbility->Expansion, pAbility->Type);
 					}
 				}
+
+				if (bNext)
+					pPrevAbility = pAbility;
 
 				switch (pAbility->Type)
 				{
 				case 1:
-					generalmap[pAbility->ID] = pAbility;
+					generalmap[pAbility->ID] = pPrevAbility;
 					break;
 				case 2:
-					archtypemap[pAbility->ID] = pAbility;
+					archtypemap[pAbility->ID] = pPrevAbility;
 					break;
 				case 3:
-					classmap[pAbility->ID] = pAbility;
+					classmap[pAbility->ID] = pPrevAbility;
 					break;
 				case 4:
-					specialmap[pAbility->ID] = pAbility;
+					specialmap[pAbility->ID] = pPrevAbility;
 					break;
 				case 5:
-					focusmap[pAbility->ID] = pAbility;
+					focusmap[pAbility->ID] = pPrevAbility;
 					break;
 				default:
 					WriteChatf("Type %d Not Found mq2aaspend in GetFirstPurchasableAA.", pAbility->Type);
@@ -435,9 +441,10 @@ CAltAbilityData* GetFirstPurchasableAA(bool bBonus)
 	return nullptr;
 }
 
-void BuySingleAA(CAltAbilityData* pBruteAbility)
+bool BuySingleAA(CAltAbilityData* pAbility, bool bDryRun)
 {
-	if (!pLocalPlayer) return;
+	if (!pLocalPlayer) return false;
+	if (!pAbility) return false;
 
 	int aaType = 0;
 	int aaCost = 0;
@@ -445,51 +452,52 @@ void BuySingleAA(CAltAbilityData* pBruteAbility)
 
 	int curLevel = 0;
 
-	if (CAltAbilityData* pAbility = pBruteAbility)
+	if (const char* AAName = pDBStr->GetString(pAbility->nName, eAltAbilityName))
 	{
-		if (const char* AAName = pDBStr->GetString(pBruteAbility->nName, eAltAbilityName))
+		aaType = pAbility->Type;
+		if (!aaType)
 		{
-			aaType = pAbility->Type;
-			if (!aaType)
+			WriteChatf("MQ2AASpend :: Unable to purchase %s", AAName);
+			return false;
+		}
+
+		if (CAltAbilityData* pNextAbility = GetAAByIdWrapper(pAbility->NextGroupAbilityId, level))
+			pAbility = pNextAbility;
+
+		curLevel = pAbility->CurrentRank;
+		aaCost = pAbility->Cost;
+
+		if (!pAltAdvManager->CanTrainAbility(pLocalPC, pAbility))
+		{
+			WriteChatf("MQ2AASpend :: You can't train %s for some reason, aborting", AAName);
+			return false;
+		}
+
+		if (GetPcProfile()->AAPoints >= aaCost)
+		{
+			WriteChatf("MQ2AASpend :: Attempting to purchase level %d of %s for %d point%s.", curLevel, AAName, aaCost, aaCost > 1 ? "s" : "");
+
+			if (!bDryRun)
 			{
-				WriteChatf("MQ2AASpend :: Unable to purchase %s", AAName);
-				return;
-			}
+				char szCommand[MAX_BUYLINE] = { 0 };
+				sprintf_s(szCommand, "/alt buy %d", pAbility->ID);
 
-			aaCost = pAbility->Cost;
-			curLevel = pAbility->CurrentRank;
-
-			if (CAltAbilityData* pNextAbility = GetAAByIdWrapper(pAbility->NextGroupAbilityId, level))
-				pAbility = pNextAbility;
-
-			if (!pAltAdvManager->CanTrainAbility(pLocalPC, pAbility))
-			{
-				WriteChatf("MQ2AASpend :: You can't train %s for some reason , aborting", AAName);
-				return;
-			}
-
-			if (GetPcProfile()->AAPoints >= aaCost)
-			{
-				WriteChatf("MQ2AASpend :: Attempting to purchase level %d of %s for %d point%s.", curLevel + 1, AAName, aaCost, aaCost > 1 ? "s" : "");
-
-				if (!bDebug)
-				{
-					char szCommand[MAX_BUYLINE] = { 0 };
-					sprintf_s(szCommand, "/alt buy %d", pAbility->ID);
-
-					DoCommand(GetCharInfo()->pSpawn, szCommand);
-				}
-				else
-				{
-					WriteChatf("MQ2AASpend :: Debugging so I wont actually buy %s", AAName);
-				}
+				DoCommand(GetCharInfo()->pSpawn, szCommand);
 			}
 			else
 			{
-				WriteChatf("MQ2AASpend :: Not enough points to buy %s, aborting", AAName);
+				WriteChatf("MQ2AASpend :: Debugging so I wont actually buy %s", AAName);
 			}
+
+			return true;
+		}
+		else
+		{
+			WriteChatf("MQ2AASpend :: Not enough points to buy %s, aborting", AAName);
 		}
 	}
+
+	return false;
 }
 
 void BruteForceBonusFirstPurchase(int mode)
@@ -499,18 +507,11 @@ void BruteForceBonusFirstPurchase(int mode)
 
 	DebugSpew("MQ2AASpend :: Starting Brute Force Bonus First Purchase");
 
-	if (CAltAbilityData* pBruteAbility = GetFirstPurchasableAA(true))
+	if (CAltAbilityData* pBruteAbility = GetFirstPurchasableAA(true, false))
 	{
 		if (const char* AAName = pDBStr->GetString(pBruteAbility->nName, eAltAbilityName))
 		{
-			if (!bDebug)
-			{
-				BuySingleAA(pBruteAbility);
-			}
-			else
-			{
-				WriteChatf("DEBUG: Buying(not really) %s", AAName);
-			}
+			BuySingleAA(pBruteAbility, bDebug);
 		}
 	}
 
@@ -524,18 +525,11 @@ void BruteForcePurchase(int mode)
 
 	DebugSpew("MQ2AASpend :: Starting Brute Force Purchase");
 
-	if (CAltAbilityData* pBruteAbility = GetFirstPurchasableAA(false))
+	if (CAltAbilityData* pBruteAbility = GetFirstPurchasableAA(false, false))
 	{
 		if (const char* AAName = pDBStr->GetString(pBruteAbility->nName, eAltAbilityName))
 		{
-			if (!bDebug)
-			{
-				BuySingleAA(pBruteAbility);
-			}
-			else
-			{
-				WriteChatf("DEBUG: Buying(not really) %s", AAName);
-			}
+			BuySingleAA(pBruteAbility, bDebug);
 		}
 	}
 
@@ -802,7 +796,7 @@ void SpendCommand(PSPAWNINFO pChar, PCHAR szLine)
 
 			if (CAltAbilityData* pAbility = GetAAByIdWrapper(index, pLocalPlayer->Level))
 			{
-				BuySingleAA(pAbility);
+				BuySingleAA(pAbility, false);
 			}
 		}
 
