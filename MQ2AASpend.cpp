@@ -102,15 +102,14 @@ void Update_INIFileName()
 
 void SaveINI()
 {
-	char szKey[MAX_STRING];
 	Update_INIFileName();
 
 	// write settings
 	std::string sectionName = "MQ2AASpend_Settings";
 	WritePrivateProfileSection(sectionName, "", INIFileName);
-	WritePrivateProfileString(sectionName, "AutoSpend", bAutoSpend ? "1" : "0", INIFileName);
-	WritePrivateProfileString(sectionName, "BruteForce", bBruteForce ? "1" : "0", INIFileName);
-	WritePrivateProfileString(sectionName, "BruteForceBonusFirst", bBruteForceBonusFirst ? "1" : "0", INIFileName);
+	WritePrivateProfileBool(sectionName, "AutoSpend", bAutoSpend, INIFileName);
+	WritePrivateProfileBool(sectionName, "BruteForce", bBruteForce, INIFileName);
+	WritePrivateProfileBool(sectionName, "BruteForceBonusFirst", bBruteForceBonusFirst, INIFileName);
 	WritePrivateProfileInt(sectionName, "BankPoints", iBankPoints, INIFileName);
 	WritePrivateProfileString(sectionName, "SpendOrder", SpendOrderString, INIFileName);
 
@@ -118,18 +117,12 @@ void SaveINI()
 	sectionName = "MQ2AASpend_AAList";
 	WritePrivateProfileSection(sectionName, "", INIFileName);
 
-	char szItem[MAX_STRING];
-
-	if (!vAAList.empty())
+	for (size_t a = 0; a < vAAList.size(); a++)
 	{
-		for (size_t a = 0; a < vAAList.size(); a++)
-		{
-			AAInfo& info = vAAList[a];
+		AAInfo& info = vAAList[a];
 
-			sprintf_s(szItem, "%s|%s", info.name.c_str(), info.level.c_str());
-			sprintf_s(szKey, "%d", a);
-			WritePrivateProfileString(sectionName, szKey, szItem, INIFileName);
-		}
+		WritePrivateProfileString(sectionName, std::to_string(a),
+			fmt::format("{}|{}", info.name, info.level), INIFileName);
 	}
 
 	if (bInitDone) WriteChatf("\atMQ2AASpend :: Settings updated\ax");
@@ -141,89 +134,61 @@ void LoadINI()
 
 	// get settings
 	std::string sectionName = "MQ2AASpend_Settings";
-	bAutoSpend = GetPrivateProfileInt(sectionName, "AutoSpend", 1, INIFileName) > 0 ? true : false;
-	bBruteForce = GetPrivateProfileInt(sectionName, "BruteForce", 0, INIFileName) > 0 ? true : false;
-	bBruteForceBonusFirst = GetPrivateProfileInt(sectionName, "BruteForceBonusFirst", 0, INIFileName) > 0 ? true : false;
+	bAutoSpend = GetPrivateProfileBool(sectionName, "AutoSpend", true, INIFileName);
+	bBruteForce = GetPrivateProfileBool(sectionName, "BruteForce", false, INIFileName);
+	bBruteForceBonusFirst = GetPrivateProfileBool(sectionName, "BruteForceBonusFirst", false, INIFileName);
 	iBankPoints = GetPrivateProfileInt(sectionName, "BankPoints", 0, INIFileName);
 	SpendOrderString = GetPrivateProfileString(sectionName, "SpendOrder", "35214", INIFileName);
 	UpdateSpendOrder();
 
 	// get all abilites
-	char szList[MAX_STRING];
-	GetPrivateProfileString("MQ2AASpend_AAList", nullptr, "0", szList, MAX_STRING, INIFileName);
+	std::vector<std::string> AAList = GetPrivateProfileKeys("MQ2AASpend_AAList", INIFileName);
 
 	// clear lists
 	vAAList.clear();
-
-	char* p = (char*)szList;
-	char* pch = 0;
-	char* Next_Token1 = 0;
-	size_t length = 0;
-	int i = 0;
-	char szItem[MAX_STRING];
+	int count = 0;
 
 	// loop through all entries under _AAList
 	// values are terminated by \0, final value is teminated with \0\0
 	// values look like
 	// 1=Gate|M
 	// 2=Innate Agility|5
-	while (*p)
+	for (const std::string& keyName : AAList)
 	{
-		length = strlen(p);
-		GetPrivateProfileString("MQ2AASpend_AAList", p, "", szItem, MAX_STRING, INIFileName);
+		std::string item = GetPrivateProfileString("MQ2AASpend_AAList", keyName, std::string(), INIFileName);
 
 		// split entries on =
-		if (!strstr(szItem, "|"))
+		std::vector<std::string_view> pieces = mq::split_view(item, '|');
+
+		if (pieces.empty())
 		{
-			WriteChatf("\arMQ2AASpend :: %s=%s isn't in valid format, deleting...\ax", p, szItem);
-			p += length;
-			p++;
+			WriteChatf("\arMQ2AASpend :: %s=%s isn't in valid format, skipping...\ax", keyName.c_str(), item.c_str());
 			continue;
 		}
 
-		pch = strtok_s(szItem, "|", &Next_Token1);
-		if (i++ > 500)
+		if (count++ > 500)
 		{
 			WriteChatf("\arMQ2AASpend :: There is a limit of 500 abilities in the ini file. Remove some maxxed entries if you want to add new abilities.\ax");
 			break;
 		}
 
-		while (pch != nullptr)
+		for (size_t i = 0; i < pieces.size();)
 		{
-			DebugSpew("pch = %s", pch);
-
 			// Odd entries are the names. Add it to the list
-			std::string name = pch;
+			std::string_view name = pieces[i++];
 
 			// next is maxlevel of ability. Add it to the level list.
-			pch = strtok_s(nullptr, "|", &Next_Token1);
-			std::string level = pch;
-			vAAList.emplace_back(std::move(name), std::move(level));
-
-			// next name
-			pch = strtok_s(nullptr, "|", &Next_Token1);
+			if (i < pieces.size())
+			{
+				std::string_view level = pieces[i++];
+				vAAList.emplace_back(std::string(name), std::string(level));
+			}
 		}
-		p += length;
-		p++;
 	}
 
 	// flag first load init as done
 	SaveINI();
 	bInitDone = true;
-}
-
-bool CheckWindowValue(PCHAR szToCheck)
-{
-	char szTemp[MAX_STRING];
-	sprintf_s(szTemp, "%s", szToCheck);
-
-	ParseMacroData(szTemp, sizeof(szTemp));
-
-	//WriteChatf("%s :: %s", szToCheck, szTemp);
-	if (strcmp(szTemp, "TRUE") == 0) return true;
-	if (strcmp(szTemp, "NULL") != 0) return false;
-	if (strcmp(szTemp, "NULL") == 0) return true;
-	return false;
 }
 
 void SpendFromINI()
@@ -500,32 +465,14 @@ bool BuySingleAA(CAltAbilityData* pAbility, bool bDryRun)
 	return false;
 }
 
-void BruteForceBonusFirstPurchase(int mode)
-{
-	if (mode != 2 && GetPcProfile()->AAPoints < iBankPoints)
-		return;
-
-	DebugSpew("MQ2AASpend :: Starting Brute Force Bonus First Purchase");
-
-	if (CAltAbilityData* pBruteAbility = GetFirstPurchasableAA(true, false))
-	{
-		if (const char* AAName = pDBStr->GetString(pBruteAbility->nName, eAltAbilityName))
-		{
-			BuySingleAA(pBruteAbility, bDebug);
-		}
-	}
-
-	DebugSpew("MQ2AASpend :: Brute Force Purchase Complete");
-}
-
-void BruteForcePurchase(int mode)
+void BruteForcePurchase(int mode, bool bonusMode)
 {
 	if (mode != 2 && GetPcProfile()->AAPoints < iBankPoints)
 		return;
 
 	DebugSpew("MQ2AASpend :: Starting Brute Force Purchase");
 
-	if (CAltAbilityData* pBruteAbility = GetFirstPurchasableAA(false, false))
+	if (CAltAbilityData* pBruteAbility = GetFirstPurchasableAA(bonusMode, false))
 	{
 		if (const char* AAName = pDBStr->GetString(pBruteAbility->nName, eAltAbilityName))
 		{
@@ -822,13 +769,13 @@ PLUGIN_API void OnPulse()
 
 	if (doBruteForce != 0)
 	{
-		BruteForcePurchase(doBruteForce);
+		BruteForcePurchase(doBruteForce, false);
 		doBruteForce = 0;
 	}
 
 	if (doBruteForceBonusFirst != 0)
 	{
-		BruteForceBonusFirstPurchase(doBruteForceBonusFirst);
+		BruteForcePurchase(doBruteForce, true);
 		doBruteForceBonusFirst = 0;
 	}
 
