@@ -512,9 +512,9 @@ CAltAbilityData* GetFirstPurchasableAA(bool bBonus, bool bNext)
 	// spend in the specified order:
 	for (int order : SpendOrder)
 	{
-		if (order >= 0 && order < ABILITY_MAP_SIZE)
+		if (order >= 1 && order <= ABILITY_MAP_SIZE)
 		{
-			AbilityMap& abilityMap = abilityMaps[order];
+			AbilityMap& abilityMap = abilityMaps[order - 1];
 			if (!abilityMap.empty())
 			{
 				return abilityMap.begin()->second;
@@ -990,7 +990,7 @@ void SpendCommand(PSPAWNINFO pChar, PCHAR szLine)
 		}
 		else if (!_strcmpi(szArg2, "on"))
 		{
-			WriteChatf("MQ2AASpend :: Brute Force Mode Enabled -- Buying AA's in order of appearence, from class to general, then special");
+			WriteChatf("MQ2AASpend :: Brute Force Mode Enabled -- Buying AA's in order of appearance, from class to general, then special");
 			bBruteForce = true;
 			bBruteForceBonusFirst = false;
 			bAutoSpend = false;
@@ -1160,7 +1160,7 @@ void SpendCommand(PSPAWNINFO pChar, PCHAR szLine)
 		{
 			std::string displayString = GetMercSpendOrderDisplayString();
 
-			WriteChatf("MQ2AASpend :: Merc Brute Force Mode Enabled -- Buying Merc AA's in order of appearence: %s", displayString.c_str());
+			WriteChatf("MQ2AASpend :: Merc Brute Force Mode Enabled -- Buying Merc AA's in order of appearance: %s", displayString.c_str());
 			bBruteForceMerc = true;
 			bAutoSpendMerc = false;
 		}
