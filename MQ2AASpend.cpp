@@ -605,7 +605,7 @@ static int GetCurrentMercenaryType()
 
 static int MercTypeToInt(std::string_view str)
 {
-	for (size_t i = 1; i < MercCategories.size(); ++i)
+	for (int i = 1; i < (int)MercCategories.size(); ++i)
 	{
 		if (ci_equals(MercCategories[i], str))
 			return i;
@@ -621,7 +621,7 @@ struct SortByPriorityList
 
 	int indexOfType(int type) const
 	{
-		for (size_t i = 0; i < priority.size(); ++i)
+		for (int i = 0; i < (int)priority.size(); ++i)
 		{
 			if (priority[i] == type)
 				return i;
