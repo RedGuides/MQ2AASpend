@@ -226,7 +226,7 @@ std::string GetMercSpendOrderDisplayString()
 
 void Update_INIFileName()
 {
-	sprintf_s(INIFileName, "%s\\%s_%s.ini", gPathConfig, EQADDR_SERVERNAME, pLocalPC->Name);
+	sprintf_s(INIFileName, "%s\\%s_%s.ini", gPathConfig, GetServerShortName(), pLocalPC->Name);
 }
 
 void SaveINI()
