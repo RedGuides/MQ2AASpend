@@ -57,6 +57,7 @@ static void UpdateSpendOrder();
 //----------------------------------------------------------------------------
 // Merc AA Settings
 
+#if HAS_MERCENARY_AA
 std::vector<AAInfo> vMercAAList;
 bool bUseCurrentMercType = false;
 bool bAutoSpendMerc = false;
@@ -83,6 +84,7 @@ static int GetCurrentMercenaryType();
 static void UpdateMercSpendOrder();
 static std::string GetMercSpendOrderDisplayString();
 static const MercenaryAbilitiesData* FindMercAbilityByName(std::string_view abilityName);
+#endif // HAS_MERCENARY_AA
 
 void ShowHelp()
 {
@@ -100,6 +102,7 @@ void ShowHelp()
 		WriteChatf("/aaspend bank # :: Keeps this many AA points banked before auto/brute spending. Default \ay0\ax.");
 		WriteChatf("/aaspend order ##### :: Sets the Spend Order.\ay Default is 35214 (class, focus, arch, gen, special)\ax.");
 
+#if HAS_MERCENARY_AA
 		WriteChatf("MQ2AASpend Merc commands:");
 		WriteChatf("/aaspend mercadd \"AA Name\" maxlevel :: Adds Merc AA Name to ini file, will not purchase past max level. Use M to specify max level");
 		WriteChatf("/aaspend mercdel \"AA Name\" :: Deletes Merc AA Name from ini file");
@@ -108,6 +111,7 @@ void ShowHelp()
 		WriteChatf("/aaspend mercauto on|off|now :: Autospends Merc AA's based on ini on ding, or now if specified. Default \ar*OFF*\ax");
 		WriteChatf("/aaspend mercorder ##### :: Sets the Merc Spend Order.\ay Default is 32451 (general=1, tank=2, healer=3, melee=4, caster=5)\ax.");
 		WriteChatf("/aaspend mercorder auto on|off :: Set the Merc Spend Order to always prioritize your current merc type. Default \ar*OFF*\ax");
+#endif // HAS_MERCENARY_AA
 	}
 }
 
@@ -122,6 +126,7 @@ void ShowStatus()
 	WriteChatf("Spend Order: \ag%s\ax", SpendOrderString.c_str());
 	WriteChatf("INI has \ay%d\ax abilities listed", vAAList.size());
 
+#if HAS_MERCENARY_AA
 	WriteChatf("\atMQ2AASpend :: Merc Status\ax");
 	WriteChatf("Merc Brute Prioritize Merc Type: %s - Will prioritize AA for your active mercenary type", bUseCurrentMercType ? "\agon\ax" : "\aroff\ax");
 	WriteChatf("Merc Brute Force Mode: %s", bBruteForceMerc ? "\agon\ax" : "\aroff\ax");
@@ -129,6 +134,7 @@ void ShowStatus()
 	std::string displayString = GetMercSpendOrderDisplayString();
 	WriteChatf("Merc Spend Order: \ag%s\ax", displayString.c_str());
 	WriteChatf("INI has \ay%d\ax merc abilities listed", vMercAAList.size());
+#endif // HAS_MERCENARY_AA
 }
 
 static void UpdateSpendOrder()
@@ -150,6 +156,7 @@ static void UpdateSpendOrder()
 	}
 }
 
+#if HAS_MERCENARY_AA
 // SpendOrderString -> SpendOrder with auto merc type factored in
 static void UpdateMercSpendOrder()
 {
@@ -223,6 +230,7 @@ std::string GetMercSpendOrderDisplayString()
 
 	return spendOrderString;
 }
+#endif // HAS_MERCENARY_AA
 
 void Update_INIFileName()
 {
@@ -243,11 +251,13 @@ void SaveINI()
 	UpdateSpendOrder();
 	WritePrivateProfileString(sectionName, "SpendOrder", SpendOrderString, INIFileName);
 
+#if HAS_MERCENARY_AA
 	WritePrivateProfileBool(sectionName, "MercAutoSpend", bAutoSpendMerc, INIFileName);
 	WritePrivateProfileBool(sectionName, "MercBruteForce", bBruteForceMerc, INIFileName);
 	UpdateMercSpendOrder();
 	WritePrivateProfileString(sectionName, "MercSpendOrder", MercSpendOrderString, INIFileName);
 	WritePrivateProfileBool(sectionName, "MercOrderAuto", bUseCurrentMercType, INIFileName);
+#endif // HAS_MERCENARY_AA
 
 	// write all abilites
 	sectionName = "MQ2AASpend_AAList";
@@ -261,6 +271,7 @@ void SaveINI()
 			fmt::format("{}|{}", info.name, info.level), INIFileName);
 	}
 
+#if HAS_MERCENARY_AA
 	// write merc abilities
 	sectionName = "MQ2AASpend_MercAAList";
 	WritePrivateProfileSection(sectionName, "", INIFileName);
@@ -272,6 +283,7 @@ void SaveINI()
 		WritePrivateProfileString(sectionName, std::to_string(a),
 			fmt::format("{}|{}", info.name, info.level), INIFileName);
 	}
+#endif // HAS_MERCENARY_AA
 
 	if (bInitDone) WriteChatf("\atMQ2AASpend :: Settings updated\ax");
 }
@@ -335,16 +347,16 @@ void LoadINI()
 	iBankPoints = GetPrivateProfileInt(sectionName, "BankPoints", 0, INIFileName);
 	SpendOrderString = GetPrivateProfileString(sectionName, "SpendOrder", DefaultSpendOrderString, INIFileName);
 	UpdateSpendOrder();
+	vAAList = LoadAAInfo("MQ2AASpend_AAList");
 
+#if HAS_MERCENARY_AA
 	bAutoSpendMerc = GetPrivateProfileBool(sectionName, "MercAutoSpend", false, INIFileName);
 	bBruteForceMerc = GetPrivateProfileBool(sectionName, "MercBruteForce", false, INIFileName);
 	bUseCurrentMercType = GetPrivateProfileBool(sectionName, "MercOrderAuto", false, INIFileName);
 	MercSpendOrderString = GetPrivateProfileString(sectionName, "MercSpendOrder", DefaultMercSpendOrderString, INIFileName);
 	UpdateMercSpendOrder();
-
-	// get all abilites
-	vAAList = LoadAAInfo("MQ2AASpend_AAList");
 	vMercAAList = LoadAAInfo("MQ2AASpend_MercAAList");
+#endif // HAS_MERCENARY_AA
 
 	// flag first load init as done
 	SaveINI();
@@ -595,6 +607,7 @@ void BruteForcePurchase(int mode, bool bonusMode)
 
 //----------------------------------------------------------------------------
 
+#if HAS_MERCENARY_AA
 static int GetCurrentMercenaryType()
 {
 	if (!pMercManager) return 0;
@@ -869,6 +882,7 @@ void SpendMercAAFromINI()
 		}
 	}
 }
+#endif // HAS_MERCENARY_AA
 
 //----------------------------------------------------------------------------
 
@@ -1146,6 +1160,7 @@ void SpendCommand(PSPAWNINFO pChar, PCHAR szLine)
 		return;
 	}
 
+#if HAS_MERCENARY_AA
 	//============================================================================
 	// Merc Commands
 
@@ -1291,6 +1306,7 @@ void SpendCommand(PSPAWNINFO pChar, PCHAR szLine)
 
 		return;
 	}
+#endif // HAS_MERCENARY_AA
 
 	ShowHelp();
 }
@@ -1331,6 +1347,7 @@ PLUGIN_API void OnPulse()
 		bAutoSpendNow = false;
 	}
 
+#if HAS_MERCENARY_AA
 	//----------------------------------------------------------------------------
 	// Merc AA Actions
 
@@ -1345,6 +1362,7 @@ PLUGIN_API void OnPulse()
 		SpendMercAAFromINI();
 		doAutoSpendMerc = false;
 	}
+#endif // HAS_MERCENARY_AA
 }
 
 PLUGIN_API bool OnIncomingChat(const char* Line, DWORD Color)
@@ -1358,10 +1376,12 @@ PLUGIN_API bool OnIncomingChat(const char* Line, DWORD Color)
 		if (bAutoSpend && !vAAList.empty())
 			doAutoSpend = true;
 
+#if HAS_MERCENARY_AA
 		if (bBruteForceMerc)
 			doBruteForceMerc = 1;
 		if (bAutoSpendMerc && !vMercAAList.empty())
 			doAutoSpendMerc = true;
+#endif // HAS_MERCENARY_AA
 	}
 
 	if (strstr(Line, "Welcome to level"))
@@ -1370,8 +1390,10 @@ PLUGIN_API bool OnIncomingChat(const char* Line, DWORD Color)
 			doBruteForce = 1;
 		if (bBruteForceBonusFirst)
 			doBruteForceBonusFirst = 1;
+#if HAS_MERCENARY_AA
 		if (bBruteForceMerc)
 			doBruteForceMerc = 1;
+#endif // HAS_MERCENARY_AA
 		if (bAutoSpend && !vAAList.empty())
 			doAutoSpend = true;
 	}
