@@ -447,7 +447,7 @@ void SpendAAFromINI()
 					if (!bDebug)
 					{
 						char szCommand[MAX_BUYLINE] = { 0 };
-#if (IS_EMU_CLIENT)
+#if !IS_EXPANSION_LEVEL(EXPANSION_LEVEL_COTF)
 						sprintf_s(szCommand, "/alt buy %d", pAbility->Index);
 #else
 						sprintf_s(szCommand, "/alt buy %d", pAbility->GroupID);
@@ -575,7 +575,7 @@ bool BuySingleAA(CAltAbilityData* pAbility)
 		if (!bDebug)
 		{
 			char szCommand[MAX_BUYLINE] = { 0 };
-#if (IS_EMU_CLIENT)
+#if !IS_EXPANSION_LEVEL(EXPANSION_LEVEL_COTF)
 			sprintf_s(szCommand, "/alt buy %d", pAbility->Index);
 #else
 			sprintf_s(szCommand, "/alt buy %d", pAbility->GroupID);
